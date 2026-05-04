@@ -1,0 +1,49 @@
+# ========================
+# PYTHON (Backend)
+# ========================
+# Bỏ qua môi trường ảo (Virtual Environment)
+venv/
+env/
+.env
+.venv/
+env.bak/
+venv.bak/
+
+# Bỏ qua các file cache và biên dịch của Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Bỏ qua các file upload/kết quả tạm thời
+temp_uploads/
+temp_results/
+runs/
+traffic_data.db
+
+# ========================
+# NODE.JS (Frontend)
+# ========================
+# Bỏ qua thư viện của Node.js
+node_modules/
+jspm_packages/
+
+# Bỏ qua các file build (khi chạy npm run build)
+front_end/dist/
+front_end/build/
+front_end/.next/
+
+# Bỏ qua các file log và debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ========================
+# HỆ ĐIỀU HÀNH & IDE
+# ========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
