@@ -10,11 +10,11 @@ const AuthScreen = ({ onLogin }) => {
     username: '', email: '', phone: '', password: '', confirmPassword: ''
   });
   const [error, setError] = useState('');
-  const [msg, setMsg] = useState('');
+  const [successDialog, setSuccessDialog] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); setMsg('');
+    setError('');
 
     if (isRegister) {
       if (formData.password !== formData.confirmPassword) return setError("Mật khẩu nhập lại không khớp!");
@@ -26,8 +26,14 @@ const AuthScreen = ({ onLogin }) => {
           password: formData.password
         });
         if (res.data.status === "success") {
-          setMsg("Đăng ký thành công! Mời bạn đăng nhập.");
-          setIsRegister(false);
+          setSuccessDialog({
+            title: "Đăng Ký Thành Công!",
+            message: "Tài khoản của bạn đã được tạo thành công. Mời bạn đăng nhập.",
+            onConfirm: () => {
+              setSuccessDialog(null);
+              setIsRegister(false);
+            }
+          });
         }
       } catch (err) { setError(err.response?.data?.detail || "Lỗi đăng ký!"); }
     } else {
@@ -37,7 +43,14 @@ const AuthScreen = ({ onLogin }) => {
           password: formData.password
         });
         localStorage.setItem('jwt_token', res.data.token);
-        onLogin();
+        setSuccessDialog({
+          title: "Đăng Nhập Thành Công!",
+          message: "Chào mừng bạn đến với hệ thống giám sát giao thông.",
+          onConfirm: () => {
+            setSuccessDialog(null);
+            onLogin();
+          }
+        });
       } catch (err) { setError("Email hoặc mật khẩu không chính xác!"); }
     }
   };
@@ -79,20 +92,37 @@ const AuthScreen = ({ onLogin }) => {
             )}
 
             {error && <div className="alert alert-danger py-2 small text-center">{error}</div>}
-            {msg && <div className="alert alert-success py-2 small text-center">{msg}</div>}
 
             <button type="submit" className="btn btn-primary btn-lg w-100 fw-bold shadow-sm mt-2">
               {isRegister ? "TẠO TÀI KHOẢN" : "VÀO HỆ THỐNG"}
             </button>
             <div className="text-center mt-4">
               <span className="text-muted small" style={{ cursor: 'pointer', textDecoration: 'underline' }}
-                onClick={() => { setIsRegister(!isRegister); setError(''); setMsg(''); }}>
+                onClick={() => { setIsRegister(!isRegister); setError(''); }}>
                 {isRegister ? "Đã có tài khoản? Đăng nhập" : "Chưa có tài khoản? Đăng ký ngay"}
               </span>
             </div>
           </form>
         </div>
       </div>
+
+      {/* MODAL THÔNG BÁO THÀNH CÔNG */}
+      {successDialog && (
+        <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 rounded-4 shadow-lg text-center p-4">
+              <div className="modal-body">
+                <div className="display-1 mb-3">✅</div>
+                <h4 className="fw-bold text-primary mb-3">{successDialog.title}</h4>
+                <p className="text-secondary mb-4">{successDialog.message}</p>
+                <button className="btn btn-primary btn-lg px-5 fw-bold rounded-pill shadow-sm" onClick={successDialog.onConfirm}>
+                  OK, TIẾP TỤC
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -131,6 +161,7 @@ function App() {
   const [history, setHistory] = useState([]);
   const [violations, setViolations] = useState([]);
   const [selectedImg, setSelectedImg] = useState(null);
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState(null);
 
   const getAuthHeader = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('jwt_token')}` } });
   const handleLogout = () => { localStorage.removeItem('jwt_token'); setIsAuthenticated(false); };
@@ -148,6 +179,17 @@ function App() {
 
   useEffect(() => { if (isAuthenticated) syncData(); }, [isAuthenticated]);
 
+  const handleClearData = async () => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử vi phạm không?")) {
+      try {
+        await axios.delete("http://localhost:8000/api/clear-data", getAuthHeader());
+        alert("Đã xóa dữ liệu thành công!");
+        await syncData(); // Tải lại danh sách trống
+      } catch (err) {
+        alert("Lỗi khi xóa dữ liệu!");
+      }
+    }
+  };
   // Hàm xử lý khi chọn file từ folder
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -155,6 +197,46 @@ function App() {
       setVideoFile(file); // Lưu file vào state
       setResultVideoUrl(null); // Xóa video đã xử lý cũ nếu có
       setStatus(""); // Reset trạng thái
+    }
+  };
+
+  const handleDownloadBoth = async () => {
+    if (!selectedImg) return;
+    
+    try {
+      // Mở hộp thoại để người dùng chọn thư mục lưu
+      const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+
+      // Hàm phụ trợ ghi file base64 vào thư mục đã chọn
+      const saveBase64ToDir = async (base64Data, fileName) => {
+        const byteString = atob(base64Data);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab], { type: 'image/jpeg' });
+
+        const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      };
+
+      // Lưu ảnh xe
+      await saveBase64ToDir(selectedImg.image_xe_url, `vi_pham_${selectedImg.id}_xe.jpg`);
+      
+      // Lưu ảnh biển số nếu có
+      if (selectedImg.image_bienso_url) {
+        await saveBase64ToDir(selectedImg.image_bienso_url, `vi_pham_${selectedImg.id}_bienso.jpg`);
+      }
+
+      alert("✅ Đã lưu thành công các ảnh vào thư mục bạn chọn!");
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error("Lỗi khi lưu file:", error);
+        alert("❌ Trình duyệt không hỗ trợ tính năng này hoặc có lỗi xảy ra.");
+      }
     }
   };
 
@@ -213,7 +295,7 @@ function App() {
                           <label className="fw-bold text-danger small">3. Ngưỡng Vi Phạm</label>
                           <span className="badge bg-danger fs-6">{speedLimit} km/h</span>
                         </div>
-                        <input type="range" className="form-range" min="20" max="120" value={speedLimit} onChange={e => setSpeedLimit(e.target.value)} />
+                        <input type="range" className="form-range" min="0" max="120" value={speedLimit} onChange={e => setSpeedLimit(e.target.value)} />
                       </div>
                       <button type="submit" className="btn btn-primary btn-lg w-100 fw-bold shadow">🚀 BẮT ĐẦU GIÁM SÁT</button>
                     </form>
@@ -227,7 +309,7 @@ function App() {
                     <div className="card-header bg-light py-3">
                       <h5 className="fw-bold mb-0 text-primary">📺 GIÁM SÁT TRỰC TIẾP</h5>
                     </div>
-                    <div className="card-body d-flex justify-content-center align-items-center p-0" style={{ minHeight: '600px', backgroundColor: '#eef2f5' }}>
+                    <div className="card-body d-flex justify-content-center align-items-center p-0" style={{ height: '600px', backgroundColor: '#eef2f5' }}>
 
                       {/* Logic hiển thị video thông minh[cite: 15] */}
                       {resultVideoUrl ? (
@@ -260,7 +342,7 @@ function App() {
               <div className="row g-4">
                 <div className="col-12 d-flex justify-content-between align-items-center p-4 rounded-3 shadow bg-white">
                   <h4 className="fw-bold text-danger mb-0">🛡️ KHO DỮ LIỆU PHẠT NGUỘI</h4>
-                  <button className="btn btn-outline-primary fw-bold" onClick={syncData}>XÓA DỮ LIỆU</button>
+                  <button className="btn btn-danger fw-bold" onClick={handleClearData}>🗑️ XÓA TOÀN BỘ DỮ LIỆU</button>
                 </div>
                 <div className="col-lg-4">
                   <div className="card shadow border-0 rounded-3 overflow-hidden bg-white">
@@ -270,7 +352,16 @@ function App() {
                         <thead className="table-light"><tr><th>Thời gian</th><th>Video</th><th>Ngưỡng</th></tr></thead>
                         <tbody>
                           {history.map((h, i) => (
-                            <tr key={i}><td>{h.timestamp}</td><td className="small">{h.filename}</td><td className="text-danger">{h.speed_limit}</td></tr>
+                            <tr
+                              key={i}
+                              onClick={() => setSelectedAnalysisId(selectedAnalysisId === h.id ? null : h.id)}
+                              style={{ cursor: 'pointer' }}
+                              className={selectedAnalysisId === h.id ? 'table-primary' : ''}
+                            >
+                              <td>{h.timestamp}</td>
+                              <td className="small">{h.filename}</td>
+                              <td className="text-danger">{h.speed_limit}</td>
+                            </tr>
                           ))}
                         </tbody>
                       </table>
@@ -279,13 +370,21 @@ function App() {
                 </div>
                 <div className="col-lg-8">
                   <div className="card shadow border-0 rounded-3 p-4 bg-white">
-                    <h5 className="fw-bold mb-4">📸 Bằng Chứng Vi Phạm ({violations.length})</h5>
+                    <h5 className="fw-bold mb-4">
+                      📸 Bằng Chứng Vi Phạm ({violations.filter(v => selectedAnalysisId === null || v.analysis_id === selectedAnalysisId).length})
+                      {selectedAnalysisId && <button className="btn btn-sm btn-outline-secondary ms-3" onClick={() => setSelectedAnalysisId(null)}>Hiển thị tất cả</button>}
+                    </h5>
                     <div className="row row-cols-2 row-cols-md-4 g-4">
-                      {violations.map((v, i) => (
+                      {violations.filter(v => selectedAnalysisId === null || v.analysis_id === selectedAnalysisId).map((v, i) => (
                         <div className="col" key={i} onClick={() => setSelectedImg(v)} style={{ cursor: 'pointer' }}>
                           <div className="card h-100 border-0 shadow-sm overflow-hidden">
                             <div className="position-relative">
-                              <img src={v.image_xe_url} className="card-img-top" style={{ height: '140px', objectFit: 'cover' }} />
+                              <img
+                                src={`data:image/jpeg;base64,${v.image_xe_url}`}
+                                className="card-img-top"
+                                alt="Vehicle"
+                                style={{ height: '200px', objectFit: 'cover' }}
+                              />
                               <span className="position-absolute bottom-0 start-0 w-100 bg-danger text-white text-center fw-bold py-1 small">{v.speed} km/h</span>
                             </div>
                             <div className="card-body p-2 text-center">
@@ -318,12 +417,17 @@ function App() {
                     <div className="col-6"><p className="fw-bold text-secondary mb-1 small">TỐC ĐỘ</p><h3 className="text-danger fw-bold">{selectedImg.speed} km/h</h3></div>
                   </div>
                   <div className="row g-3">
-                    <div className="col-md-6"><div className="card p-1"><img src={selectedImg.image_xe_url} className="img-fluid rounded" /></div></div>
+                    <div className="col-md-6"><div className="card p-1"><img src={`data:image/jpeg;base64,${selectedImg.image_xe_url}`} className="img-fluid rounded" /></div></div>
                     <div className="col-md-6">
                       <div className="card p-1">
-                        {selectedImg.image_bienso_url ? <img src={selectedImg.image_bienso_url} className="img-fluid rounded" /> : <div className="p-5 text-muted">Không có ảnh biển</div>}
+                        {selectedImg.image_bienso_url ? <img src={`data:image/jpeg;base64,${selectedImg.image_bienso_url}`} className="img-fluid rounded" /> : <div className="p-5 text-muted">Không có ảnh biển</div>}
                       </div>
                     </div>
+                  </div>
+                  <div className="mt-4">
+                    <button className="btn btn-primary fw-bold px-5 rounded-pill shadow-sm" onClick={handleDownloadBoth}>
+                      ⬇️ TẢI XUỐNG CẢ 2 ẢNH
+                    </button>
                   </div>
                 </div>
               </div>

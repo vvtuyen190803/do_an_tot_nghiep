@@ -31,9 +31,9 @@ node_modules/
 jspm_packages/
 
 # Bỏ qua các file build (khi chạy npm run build)
-dist/
-build/
-.next/
+front_end/dist/
+front_end/build/
+front_end/.next/
 
 # Bỏ qua các file log và debug
 npm-debug.log*
