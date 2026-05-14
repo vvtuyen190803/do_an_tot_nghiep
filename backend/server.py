@@ -84,7 +84,7 @@ def analyze_speed(video: UploadFile = File(...), points: str = Form(...), speed_
     try:
         from track import run # Import trực tiếp vì cùng folder backend[cite: 18]
         run(ai_config)
-        subprocess.run(["ffmpeg", "-y", "-i", raw_v, "-vcodec", "h264_nvenc", "-cq", "28", web_v])
+        subprocess.run(["ffmpeg", "-y", "-i", raw_v, "-vcodec", "libx264", "-crf", "28", web_v], check=True)
         
         conn = sqlite3.connect(DB_PATH)
         timestamp = time.strftime("%H:%M:%S - %d/%m/%Y")

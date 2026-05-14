@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 // --- COMPONENT XÁC THỰC (Gồm Đăng nhập & Đăng ký) ---
 const AuthScreen = ({ onLogin }) => {
@@ -142,11 +143,120 @@ const Navigation = ({ onLogout }) => {
             <li className="nav-item">
               <Link className={`nav-link fw-bold px-3 rounded ${location.pathname === '/history' ? 'bg-primary text-white shadow-sm' : 'text-secondary'}`} to="/history">📜 DANH SÁCH PHƯƠNG TIỆN VI PHẠM</Link>
             </li>
+            <li className="nav-item ms-3">
+              <Link className={`nav-link fw-bold px-3 rounded ${location.pathname === '/analytics' ? 'bg-primary text-white shadow-sm' : 'text-secondary'}`} to="/analytics">📊 THỐNG KÊ PHÂN TÍCH</Link>
+            </li>
           </ul>
           <button className="btn btn-outline-danger fw-bold shadow-sm px-4" onClick={onLogout}>Đăng xuất 🚪</button>
         </div>
       </div>
     </nav>
+  );
+};
+
+// --- COMPONENT THỐNG KÊ PHÂN TÍCH ---
+const AnalyticsScreen = ({ history, violations }) => {
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState('all');
+
+  // Lọc violations theo lựa chọn
+  const filteredViolations = selectedAnalysisId === 'all'
+    ? violations
+    : violations.filter(v => v.analysis_id === parseInt(selectedAnalysisId));
+
+  // Tính toán dữ liệu cho Biểu đồ Tròn (Tỉ lệ loại xe)
+  const vehicleTypeCounts = filteredViolations.reduce((acc, curr) => {
+    acc[curr.vehicle_type] = (acc[curr.vehicle_type] || 0) + 1;
+    return acc;
+  }, {});
+
+  const pieData = Object.keys(vehicleTypeCounts).map(type => ({
+    name: type,
+    value: vehicleTypeCounts[type]
+  }));
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+
+  // Tính toán dữ liệu cho Biểu đồ Cột (Vận tốc trung bình)
+  const speedStats = filteredViolations.reduce((acc, curr) => {
+    if (!acc[curr.vehicle_type]) {
+      acc[curr.vehicle_type] = { totalSpeed: 0, count: 0 };
+    }
+    acc[curr.vehicle_type].totalSpeed += curr.speed;
+    acc[curr.vehicle_type].count += 1;
+    return acc;
+  }, {});
+
+  const barData = Object.keys(speedStats).map(type => ({
+    name: type,
+    avgSpeed: parseFloat((speedStats[type].totalSpeed / speedStats[type].count).toFixed(2))
+  }));
+
+  return (
+    <div className="row g-4">
+      <div className="col-12 d-flex justify-content-between align-items-center p-4 rounded-3 shadow bg-white">
+        <h4 className="fw-bold text-success mb-0">📊 BẢNG ĐIỀU KHIỂN THỐNG KÊ</h4>
+        <select
+          className="form-select w-auto fw-bold"
+          value={selectedAnalysisId}
+          onChange={(e) => setSelectedAnalysisId(e.target.value)}
+        >
+          <option value="all">Tất cả Video đã phân tích</option>
+          {history.map(h => (
+            <option key={h.id} value={h.id}>{h.filename} ({h.timestamp})</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="col-lg-6">
+        <div className="card shadow border-0 rounded-3 p-4 bg-white h-100">
+          <h5 className="fw-bold mb-4 text-center">Cơ Cấu Phương Tiện Vi Phạm</h5>
+          {filteredViolations.length === 0 ? (
+            <div className="text-center text-muted p-5 mt-5">Không có dữ liệu vi phạm</div>
+          ) : (
+            <>
+              <div style={{ height: '350px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={5} dataKey="value" label>
+                      {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                    </Pie>
+                    <RechartsTooltip />
+                    <Legend verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="text-center mt-3 fw-bold text-secondary">
+                Tổng cộng: {filteredViolations.length} lượt vi phạm
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="col-lg-6">
+        <div className="card shadow border-0 rounded-3 p-4 bg-white h-100">
+          <h5 className="fw-bold mb-4 text-center">Vận Tốc Trung Bình Theo Loại Xe</h5>
+          {filteredViolations.length === 0 ? (
+            <div className="text-center text-muted p-5 mt-5">Không có dữ liệu vi phạm</div>
+          ) : (
+            <div style={{ height: '350px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis label={{ value: 'km/h', angle: -90, position: 'insideLeft' }} />
+                  <RechartsTooltip />
+                  <Legend verticalAlign="bottom" height={36} />
+                  <Bar dataKey="avgSpeed" fill="#8884d8" name="Vận tốc TB (km/h)" radius={[5, 5, 0, 0]}>
+                    {barData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[(index + 1) % COLORS.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -202,7 +312,7 @@ function App() {
 
   const handleDownloadBoth = async () => {
     if (!selectedImg) return;
-    
+
     try {
       // Mở hộp thoại để người dùng chọn thư mục lưu
       const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
@@ -225,7 +335,7 @@ function App() {
 
       // Lưu ảnh xe
       await saveBase64ToDir(selectedImg.image_xe_url, `vi_pham_${selectedImg.id}_xe.jpg`);
-      
+
       // Lưu ảnh biển số nếu có
       if (selectedImg.image_bienso_url) {
         await saveBase64ToDir(selectedImg.image_bienso_url, `vi_pham_${selectedImg.id}_bienso.jpg`);
@@ -399,6 +509,7 @@ function App() {
                 </div>
               </div>
             } />
+            <Route path="/analytics" element={<AnalyticsScreen history={history} violations={violations} />} />
           </Routes>
         </div>
 

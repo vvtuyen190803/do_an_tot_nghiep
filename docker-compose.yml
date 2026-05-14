@@ -1,0 +1,33 @@
+services:
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: datn_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/temp_results:/app/temp_results
+      - ./backend/temp_uploads:/app/temp_uploads
+      - ./backend/traffic_data.db:/app/traffic_data.db
+    # Uncomment the deploy section below if you have NVIDIA Container Toolkit installed
+    # and want to pass the GPU to the Docker container for YOLO/PyTorch and NVENC.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./front_end
+      dockerfile: Dockerfile
+    container_name: datn_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
